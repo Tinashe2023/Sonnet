@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sonnet Chat App</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Login Screen -->
+    <div id="login-screen" class="login-container">
+        <div class="login-card">
+            <h1>Welcome to ClassChat</h1>
+            <div class="login-form">
+                <div class="profile-pic-section">
+                    <div class="profile-pic-container">
+                        <img id="profile-preview" src="/uploads/profiles/default-profile.jpg" alt="Profile Picture" class="profile-pic-preview">
+                        <label for="profile-pic-input" class="profile-pic-label">📷</label>
+                        <input type="file" id="profile-pic-input" accept="image/*" style="display: none;">
+                    </div>
+                </div>
+                <input type="text" id="username-input" placeholder="Enter your username..." required maxlength="20">
+                <button id="login-btn">Start Chatting</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chat Screen -->
+    <div id="chat-screen" class="chat-main-container hidden">
+        <div class="chat-layout">
+            <!-- Sidebar -->
+            <div class="sidebar">
+                <div class="sidebar-header">
+                    <div class="user-info">
+                        <img id="current-user-pic" src="/uploads/profiles/default-profile.jpg" alt="Your Picture" class="user-avatar">
+                        <div>
+                            <div id="current-username" class="username">Username</div>
+                            <div id="current-user-id" class="user-id">ID: ######</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="chat-tabs">
+                    <button id="group-chat-tab" class="tab-btn active">Group Chat</button>
+                </div>
+                
+                <div class="users-section">
+                    <h3>Online Users (<span id="online-count">0</span>)</h3>
+                    <div id="users-list" class="users-list"></div>
+                </div>
+            </div>
+
+            <!-- Chat Area -->
+            <div class="chat-area">
+                <div class="chat-header">
+                    <div class="chat-header-content">
+                        <img id="chat-avatar" src="profile.png" alt="Chat Picture" class="chat-avatar">
+                        <div class="header-text">
+                            <h1 id="chat-title" class="chat-title">Class Chat Room</h1>
+                            <p id="chat-status" class="chat-status">Group chat</p>
+                        </div>
+                    </div>
+                    <button id="chat-info-btn" class="info-btn">ℹ️</button>
+                </div>
+
+                <div class="messages-window">
+                    <div id="messages" class="messages-container"></div>
+                    <div id="typing-indicator" class="typing-indicator hidden"></div>
+                </div>
+
+                <div class="message-input-area">
+                    <form id="message-form">
+                        <label for="file-input" class="attach-button">📎</label>
+                        <input type="file" id="file-input" style="display: none;">
+                        <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off">
+                        <button type="submit" class="send-button">➤</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Info Modal -->
+    <div id="user-info-modal" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <div id="user-info-content"></div>
+        </div>
+    </div>
+    
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
