@@ -59,6 +59,7 @@ io.on('connection', (socket) => {
             username: userData.username,
             socketId: socket.id,
             profilePic: userData.profilePic || '/uploads/profiles/default-profile.jpg',
+            about: userData.about || 'Hey there! I am using ClassChat',
             status: 'online',
             joinedAt: new Date().toISOString()
         };

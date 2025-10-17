@@ -5,6 +5,7 @@ const socket = io();
 const loginScreen = document.getElementById('login-screen');
 const chatScreen = document.getElementById('chat-screen');
 const usernameInput = document.getElementById('username-input');
+const aboutInput = document.getElementById('about-input');
 const loginBtn = document.getElementById('login-btn');
 const profilePicInput = document.getElementById('profile-pic-input');
 const profilePreview = document.getElementById('profile-preview');
@@ -17,12 +18,16 @@ const usersList = document.getElementById('users-list');
 const currentUserPic = document.getElementById('current-user-pic');
 const currentUsername = document.getElementById('current-username');
 const currentUserId = document.getElementById('current-user-id');
+const currentUserInfo = document.getElementById('current-user-info');
 const chatTitle = document.getElementById('chat-title');
 const chatStatus = document.getElementById('chat-status');
 const chatAvatar = document.getElementById('chat-avatar');
+const chatHeaderClickable = document.getElementById('chat-header-clickable');
 const groupChatTab = document.getElementById('group-chat-tab');
 const typingIndicator = document.getElementById('typing-indicator');
 const userInfoModal = document.getElementById('user-info-modal');
+const menuToggle = document.getElementById('menu-toggle');
+const sidebar = document.querySelector('.sidebar');
 
 // **Global Variables**
 let currentUser = null;
@@ -51,6 +56,8 @@ loginBtn.addEventListener('click', async () => {
         return;
     }
 
+    const about = (aboutInput && aboutInput.value ? aboutInput.value.trim() : '') || 'Hey there! I am using ClassChat';
+
     let profilePicPath = '/uploads/profiles/default-profile.jpg';
     
     // Upload profile picture if selected
@@ -75,7 +82,8 @@ loginBtn.addEventListener('click', async () => {
     // Register user
     socket.emit('user-register', {
         username: username,
-        profilePic: profilePicPath
+        profilePic: profilePicPath,
+        about: about
     });
 });
 
@@ -84,6 +92,17 @@ function formatTime(timestamp) {
     return new Date(timestamp).toLocaleTimeString([], { 
         hour: '2-digit', 
         minute: '2-digit' 
+    });
+}
+
+function formatDate(isoString) {
+    const date = new Date(isoString);
+    return date.toLocaleDateString([], {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
     });
 }
 
@@ -129,6 +148,8 @@ function createMessageElement(messageData) {
         const avatar = document.createElement('img');
         avatar.src = messageData.senderProfile || '/uploads/profiles/default-profile.jpg';
         avatar.classList.add('message-avatar');
+        avatar.dataset.userId = messageData.senderId;
+        avatar.addEventListener('click', () => showUserProfile(messageData.senderId));
         messageElement.appendChild(avatar);
     }
 
@@ -139,6 +160,7 @@ function createMessageElement(messageData) {
         const senderName = document.createElement('div');
         senderName.classList.add('sender-name');
         senderName.textContent = messageData.senderName;
+        senderName.addEventListener('click', () => showUserProfile(messageData.senderId));
         messageBody.appendChild(senderName);
     }
 
@@ -165,6 +187,8 @@ function createFileElement(fileData) {
         const avatar = document.createElement('img');
         avatar.src = fileData.senderProfile || '/uploads/profiles/default-avatar.png';
         avatar.classList.add('message-avatar');
+        avatar.dataset.userId = fileData.senderId;
+        avatar.addEventListener('click', () => showUserProfile(fileData.senderId));
         messageElement.appendChild(avatar);
     }
 
@@ -175,6 +199,7 @@ function createFileElement(fileData) {
         const senderName = document.createElement('div');
         senderName.classList.add('sender-name');
         senderName.textContent = fileData.senderName;
+        senderName.addEventListener('click', () => showUserProfile(fileData.senderId));
         messageBody.appendChild(senderName);
     }
 
@@ -319,12 +344,79 @@ window.addEventListener('click', (e) => {
     }
 });
 
+// Show profile modal for a given userId
+async function showUserProfile(userId) {
+    if (!userId) return;
+    try {
+        const resp = await fetch(`/user/${userId}`);
+        if (!resp.ok) throw new Error('User not found');
+        const user = await resp.json();
+        const modalContent = userInfoModal.querySelector('.modal-content');
+        if (modalContent) {
+            modalContent.innerHTML = `
+                <span class="close-btn">&times;</span>
+                <div class="profile-modal-header">
+                    <img src="${user.profilePic}" alt="${user.username}" class="profile-modal-pic" />
+                    <div class="profile-modal-name">${user.username}</div>
+                    <div class="profile-modal-id">ID: ${user.id}</div>
+                </div>
+                <div class="profile-modal-body">
+                    <div class="profile-info-section">
+                        <div class="profile-info-label">About</div>
+                        <div class="profile-info-value">${user.about || ''}</div>
+                    </div>
+                    <div class="profile-info-section">
+                        <div class="profile-info-label">Status</div>
+                        <div class="profile-status-online">Online</div>
+                    </div>
+                    <div class="profile-info-section">
+                        <div class="profile-info-label">Joined</div>
+                        <div class="profile-info-value">${formatDate(user.joinedAt)}</div>
+                    </div>
+                </div>
+            `;
+            modalContent.querySelector('.close-btn').addEventListener('click', () => {
+                userInfoModal.classList.add('hidden');
+            });
+        }
+        userInfoModal.classList.remove('hidden');
+    } catch (e) {
+        console.error('Failed to load user profile', e);
+    }
+}
+
+// Optional: Show current user info when clicking chat header (if element exists)
+if (typeof chatHeaderClickable !== 'undefined' && chatHeaderClickable) {
+    chatHeaderClickable.addEventListener('click', () => {
+        if (!currentUser) return;
+        const modalContent = userInfoModal.querySelector('.modal-content');
+        if (modalContent) {
+            const infoHtml = `
+                <div class="user-info">
+                    <img src="${currentUser.profilePic}" alt="${currentUser.username}" class="user-avatar large">
+                    <div class="user-name">${currentUser.username}</div>
+                    <div class="user-about">${currentUser.about || ''}</div>
+                    <div class="user-meta">Joined: ${formatDate(currentUser.joinedAt || new Date().toISOString())}</div>
+                    <div class="user-id">ID: ${currentUser.id}</div>
+                </div>
+            `;
+            modalContent.querySelector('.user-info-body')
+                ? modalContent.querySelector('.user-info-body').innerHTML = infoHtml
+                : (modalContent.innerHTML = `<div class="user-info-body">${infoHtml}</div>`);
+        }
+        userInfoModal.classList.remove('hidden');
+    });
+}
+
 // **Socket Event Handlers**
 socket.on('user-registered', (user) => {
     currentUser = user;
     currentUsername.textContent = user.username;
     currentUserId.textContent = `ID: ${user.id}`;
     currentUserPic.src = user.profilePic;
+    if (currentUserInfo) {
+        currentUserInfo.textContent = user.about || '';
+    }
     
     loginScreen.classList.add('hidden');
     chatScreen.classList.remove('hidden');
@@ -381,6 +473,28 @@ socket.on('error', (error) => {
     console.error('Socket error:', error);
     alert(error.message);
 });
+// Show menu button only on mobile
+function updateMenuButtonVisibility() {
+    if (window.innerWidth <= 768) {
+        menuToggle.style.display = 'flex';
+    } else {
+        menuToggle.style.display = 'none';
+        sidebar.classList.remove('active');
+    }
+}
 
+menuToggle.addEventListener('click', () => {
+    sidebar.classList.toggle('active');
+});
+
+// Close sidebar when user clicks on a user
+document.querySelectorAll('.user-item').forEach(item => {
+    item.addEventListener('click', () => {
+        sidebar.classList.remove('active');
+    });
+});
+
+updateMenuButtonVisibility();
+window.addEventListener('resize', updateMenuButtonVisibility);
 // Initialize
 console.log('Sonnet chat app initialized');

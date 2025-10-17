@@ -20,6 +20,7 @@
                     </div>
                 </div>
                 <input type="text" id="username-input" placeholder="Enter your username..." required maxlength="20">
+                <textarea id="about-input" placeholder="Enter your about/status (optional)..." maxlength="139" rows="3"></textarea>
                 <button id="login-btn">Start Chatting</button>
             </div>
         </div>
@@ -31,7 +32,7 @@
             <!-- Sidebar -->
             <div class="sidebar">
                 <div class="sidebar-header">
-                    <div class="user-info">
+                    <div class="user-info" id="current-user-info">
                         <img id="current-user-pic" src="/uploads/profiles/default-profile.jpg" alt="Your Picture" class="user-avatar">
                         <div>
                             <div id="current-username" class="username">Username</div>
@@ -53,7 +54,8 @@
             <!-- Chat Area -->
             <div class="chat-area">
                 <div class="chat-header">
-                    <div class="chat-header-content">
+                    <button id="menu-toggle" class="menu-toggle">☰</button>
+                    <div class="chat-header-content" id="chat-header-clickable">
                         <img id="chat-avatar" src="profile.png" alt="Chat Picture" class="chat-avatar">
                         <div class="header-text">
                             <h1 id="chat-title" class="chat-title">Class Chat Room</h1>
@@ -82,7 +84,7 @@
 
     <!-- User Info Modal -->
     <div id="user-info-modal" class="modal hidden">
-        <div class="modal-content">
+        <div class="modal-content profile-modal">
             <span class="close-btn">&times;</span>
             <div id="user-info-content"></div>
         </div>
