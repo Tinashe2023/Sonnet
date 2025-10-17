@@ -117,6 +117,11 @@ function switchToGroupChat() {
     document.querySelectorAll('.user-item').forEach(item => {
         item.classList.remove('active');
     });
+    
+    // Close sidebar on mobile after switching to group chat
+    if (window.innerWidth <= 768) {
+        sidebar.classList.remove('active');
+    }
 }
 
 function switchToPrivateChat(user) {
@@ -247,6 +252,10 @@ function updateUsersList(users) {
         
         userItem.addEventListener('click', () => {
             switchToPrivateChat(user);
+            // Close sidebar on mobile after selecting a user
+            if (window.innerWidth <= 768) {
+                sidebar.classList.remove('active');
+            }
         });
         
         usersList.appendChild(userItem);
@@ -487,12 +496,8 @@ menuToggle.addEventListener('click', () => {
     sidebar.classList.toggle('active');
 });
 
-// Close sidebar when user clicks on a user
-document.querySelectorAll('.user-item').forEach(item => {
-    item.addEventListener('click', () => {
-        sidebar.classList.remove('active');
-    });
-});
+// Note: User item click handlers are now added dynamically in updateUsersList()
+// This ensures they work with dynamically created elements
 
 updateMenuButtonVisibility();
 window.addEventListener('resize', updateMenuButtonVisibility);
