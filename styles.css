@@ -625,6 +625,8 @@ body {
     .chat-area {
         width: 100%;
         height: 100vh;
+        display: flex;
+        flex-direction: column;
     }
     
     .chat-header {
@@ -655,6 +657,7 @@ body {
     
     .message-input-area {
         padding: 10px 15px;
+        flex-shrink: 0;
     }
     
     #message-form {
@@ -719,6 +722,7 @@ body {
     
     .message-input-area {
         padding: 8px 10px;
+        flex-shrink: 0;
     }
     
     #message-form {
