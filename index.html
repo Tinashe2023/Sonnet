@@ -71,9 +71,16 @@
                 </div>
 
                 <div class="message-input-area">
+                    <div id="voice-recording-panel" class="voice-recording-panel">
+                        <span class="recording-time" id="recording-time">0:00</span>
+                        <span style="flex: 1; color: #8696a0;">Recording voice message...</span>
+                        <button type="button" id="cancel-recording" class="cancel-recording">Cancel</button>
+                        <button type="button" id="send-recording" class="send-recording">Send</button>
+                    </div>
                     <form id="message-form">
                         <label for="file-input" class="attach-button">📎</label>
                         <input type="file" id="file-input" style="display: none;">
+                        <button type="button" id="voice-btn" class="voice-button">🎤</button>
                         <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off">
                         <button type="submit" class="send-button">➤</button>
                     </form>

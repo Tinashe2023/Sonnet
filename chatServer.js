@@ -200,7 +200,7 @@ app.post('/upload', upload.single('file'), (req, res) => {
         mimetype: req.file.mimetype,
         size: req.file.size,
         user: req.body.user,
-        timestamp: req.body.timestamp,
+        timestamp: parseInt(req.body.timestamp) || Date.now(),  // <-- Parse to number
         recipientId: req.body.recipientId || null
     };
     

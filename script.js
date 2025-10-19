@@ -110,8 +110,12 @@ function switchToGroupChat() {
     activeChat = 'group';
     chatTitle.textContent = 'Class Chat Room';
     chatStatus.textContent = `${onlineUsers.length} members`;
+    chatStatus.style.color = ''; 
     chatAvatar.src = 'profile.png';
     groupChatTab.classList.add('active');
+    
+    // Add this line to clear messages
+    messagesWindow.innerHTML = '';
     
     // Remove active state from user items
     document.querySelectorAll('.user-item').forEach(item => {
@@ -128,6 +132,7 @@ function switchToPrivateChat(user) {
     activeChat = user.id;
     chatTitle.textContent = user.username;
     chatStatus.textContent = 'Online';
+    chatStatus.style.color = ''; 
     chatAvatar.src = user.profilePic;
     groupChatTab.classList.remove('active');
     
@@ -208,18 +213,29 @@ function createFileElement(fileData) {
         messageBody.appendChild(senderName);
     }
 
-    const fileLink = document.createElement('a');
-    fileLink.href = fileData.path;
-    fileLink.classList.add('file-link');
-    fileLink.download = fileData.filename;
-    
-    const fileIcon = fileData.mimetype.startsWith('image/') ? '🖼️' : '📄';
-    fileLink.innerHTML = `${fileIcon} ${fileData.filename}`;
-    messageBody.appendChild(fileLink);
+    // Check if it's a voice message
+    if (fileData.isVoiceMessage || fileData.filename.includes('voice-')) {
+        const audioPlayer = document.createElement('audio');
+        audioPlayer.controls = true;
+        audioPlayer.src = fileData.path;
+        audioPlayer.style.width = '100%';
+        audioPlayer.style.maxWidth = '250px';
+        messageBody.appendChild(audioPlayer);
+    } else {
+        const fileLink = document.createElement('a');
+        fileLink.href = fileData.path;
+        fileLink.classList.add('file-link');
+        fileLink.download = fileData.filename;
+        
+        const fileIcon = fileData.mimetype.startsWith('image/') ? '🖼️' : '📄';
+        fileLink.innerHTML = `${fileIcon} ${fileData.filename}`;
+        messageBody.appendChild(fileLink);
+    }
 
     const messageTime = document.createElement('div');
     messageTime.classList.add('message-time');
-    messageTime.textContent = formatTime(fileData.timestamp || Date.now());
+    const timestamp = fileData.timestamp ? (typeof fileData.timestamp === 'string' ? parseInt(fileData.timestamp) : fileData.timestamp) : Date.now();
+    messageTime.textContent = formatTime(timestamp);
     messageBody.appendChild(messageTime);
 
     messageElement.appendChild(messageBody);
@@ -341,7 +357,113 @@ fileInput.addEventListener('change', async () => {
     
     fileInput.value = '';
 });
+// Voice recording functionality
+let mediaRecorder;
+let audioChunks = [];
+let recordingInterval;
+let recordingStartTime;
 
+const voiceBtn = document.getElementById('voice-btn');
+const voiceRecordingPanel = document.getElementById('voice-recording-panel');
+const recordingTime = document.getElementById('recording-time');
+const cancelRecordingBtn = document.getElementById('cancel-recording');
+const sendRecordingBtn = document.getElementById('send-recording');
+
+voiceBtn.addEventListener('click', async () => {
+    if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+        // Start recording
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+            audioChunks = [];
+            
+            mediaRecorder.ondataavailable = (event) => {
+                audioChunks.push(event.data);
+            };
+            
+            mediaRecorder.onstop = async () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                // Stop all tracks
+                stream.getTracks().forEach(track => track.stop());
+            };
+            
+            mediaRecorder.start();
+            voiceBtn.classList.add('recording');
+            voiceRecordingPanel.classList.add('active');
+            
+            // Start timer
+            recordingStartTime = Date.now();
+            recordingInterval = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+                const minutes = Math.floor(elapsed / 60);
+                const seconds = elapsed % 60;
+                recordingTime.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            }, 1000);
+            
+        } catch (error) {
+            console.error('Error accessing microphone:', error);
+            alert('Could not access microphone. Please grant permission.');
+        }
+    }
+});
+
+cancelRecordingBtn.addEventListener('click', () => {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+        clearInterval(recordingInterval);
+        voiceBtn.classList.remove('recording');
+        voiceRecordingPanel.classList.remove('active');
+        audioChunks = [];
+        recordingTime.textContent = '0:00';
+    }
+});
+
+sendRecordingBtn.addEventListener('click', async () => {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+        clearInterval(recordingInterval);
+        voiceBtn.classList.remove('recording');
+        voiceRecordingPanel.classList.remove('active');
+        recordingTime.textContent = '0:00';
+        
+        // Wait for the recording to finish processing
+        mediaRecorder.onstop = async () => {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            
+            // Create FormData and upload
+            const formData = new FormData();
+            formData.append('file', audioBlob, `voice-${Date.now()}.webm`);
+            formData.append('user', currentUser.username);
+            formData.append('timestamp', Date.now());
+            
+            if (activeChat !== 'group') {
+                formData.append('recipientId', activeChat);
+            }
+            
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData,
+                });
+                const result = await response.json();
+                
+                if (response.ok) {
+                    socket.emit('file-upload', {
+                        ...result.file,
+                        recipientId: activeChat !== 'group' ? activeChat : null,
+                        isVoiceMessage: true
+                    });
+                }
+            } catch (error) {
+                console.error('Error uploading voice message:', error);
+                alert('Failed to send voice message');
+            }
+            
+            // Stop all tracks
+            mediaRecorder.stream.getTracks().forEach(track => track.stop());
+        };
+    }
+});
 // Close modal functionality
 document.querySelector('.close-btn').addEventListener('click', () => {
     userInfoModal.classList.add('hidden');
@@ -469,11 +591,26 @@ socket.on('file-received', (fileData) => {
 
 socket.on('user-typing', (data) => {
     if (data.userId !== currentUser.id) {
-        if (data.isTyping) {
-            typingIndicator.textContent = `${data.username} is typing...`;
-            typingIndicator.classList.remove('hidden');
-        } else {
-            typingIndicator.classList.add('hidden');
+        // Check if typing is relevant to current chat
+        const isRelevantToCurrentChat = (
+            (activeChat === 'group' && !data.recipientId) || 
+            (activeChat === data.userId)
+        );
+        
+        if (isRelevantToCurrentChat) {
+            if (data.isTyping) {
+                // Show typing in chat header
+                chatStatus.textContent = 'typing...';
+                chatStatus.style.color = '#25D366';
+            } else {
+                // Restore original status
+                if (activeChat === 'group') {
+                    chatStatus.textContent = `${onlineUsers.length + 1} members`;
+                } else {
+                    chatStatus.textContent = 'Online';
+                }
+                chatStatus.style.color = '';
+            }
         }
     }
 });
