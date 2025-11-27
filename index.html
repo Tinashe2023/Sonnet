@@ -1,27 +1,35 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sonnet Chat App</title>
     <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
     <!-- Login Screen -->
     <div id="login-screen" class="login-container">
         <div class="login-card">
             <h1>Welcome to ClassChat</h1>
+            <div id="room-indicator" class="room-indicator hidden"></div>
             <div class="login-form">
                 <div class="profile-pic-section">
                     <div class="profile-pic-container">
-                        <img id="profile-preview" src="/uploads/profiles/default-profile.jpg" alt="Profile Picture" class="profile-pic-preview">
+                        <img id="profile-preview" src="/uploads/profiles/default-profile.jpg" alt="Profile Picture"
+                            class="profile-pic-preview">
                         <label for="profile-pic-input" class="profile-pic-label">📷</label>
                         <input type="file" id="profile-pic-input" accept="image/*" style="display: none;">
                     </div>
                 </div>
                 <input type="text" id="username-input" placeholder="Enter your username..." required maxlength="20">
-                <textarea id="about-input" placeholder="Enter your about/status (optional)..." maxlength="139" rows="3"></textarea>
+                <textarea id="about-input" placeholder="Enter your about/status (optional)..." maxlength="139"
+                    rows="3"></textarea>
                 <button id="login-btn">Start Chatting</button>
+                <div class="room-actions">
+                    <button id="create-room-btn" class="create-room-btn">🔗 Create Private Room</button>
+                </div>
             </div>
         </div>
     </div>
@@ -33,18 +41,19 @@
             <div class="sidebar">
                 <div class="sidebar-header">
                     <div class="user-info" id="current-user-info">
-                        <img id="current-user-pic" src="/uploads/profiles/default-profile.jpg" alt="Your Picture" class="user-avatar">
+                        <img id="current-user-pic" src="/uploads/profiles/default-profile.jpg" alt="Your Picture"
+                            class="user-avatar">
                         <div>
                             <div id="current-username" class="username">Username</div>
                             <div id="current-user-id" class="user-id">ID: ######</div>
                         </div>
                     </div>
                 </div>
-                
+
                 <div class="chat-tabs">
                     <button id="group-chat-tab" class="tab-btn active">Group Chat</button>
                 </div>
-                
+
                 <div class="users-section">
                     <h3>Online Users (<span id="online-count">0</span>)</h3>
                     <div id="users-list" class="users-list"></div>
@@ -62,6 +71,7 @@
                             <p id="chat-status" class="chat-status">Group chat</p>
                         </div>
                     </div>
+                    <button id="copy-room-link-btn" class="copy-room-link-btn hidden" title="Copy Room Link">🔗</button>
                     <button id="chat-info-btn" class="info-btn">ℹ️</button>
                 </div>
 
@@ -96,8 +106,9 @@
             <div id="user-info-content"></div>
         </div>
     </div>
-    
+
     <script src="/socket.io/socket.io.js"></script>
     <script src="script.js"></script>
 </body>
+
 </html>

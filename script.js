@@ -28,6 +28,9 @@ const typingIndicator = document.getElementById('typing-indicator');
 const userInfoModal = document.getElementById('user-info-modal');
 const menuToggle = document.getElementById('menu-toggle');
 const sidebar = document.querySelector('.sidebar');
+const createRoomBtn = document.getElementById('create-room-btn');
+const roomIndicator = document.getElementById('room-indicator');
+const copyRoomLinkBtn = document.getElementById('copy-room-link-btn');
 
 // **Global Variables**
 let currentUser = null;
@@ -35,6 +38,34 @@ let activeChat = 'group'; // 'group' or user ID for private chat
 let onlineUsers = [];
 let typingTimer = null;
 let isTyping = false;
+let currentRoomId = null;
+
+// **Room Functionality**
+// Get room ID from URL parameter
+function getRoomIdFromURL() {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get('room');
+}
+
+// Set room ID in URL
+function setRoomIdInURL(roomId) {
+    const url = new URL(window.location);
+    url.searchParams.set('room', roomId);
+    window.history.pushState({}, '', url);
+}
+
+// Generate room link
+function generateRoomLink(roomId) {
+    const baseUrl = window.location.origin + window.location.pathname;
+    return `${baseUrl}?room=${roomId}`;
+}
+
+// Initialize room on page load
+currentRoomId = getRoomIdFromURL();
+if (currentRoomId) {
+    roomIndicator.textContent = `🔒 Private Room: ${currentRoomId}`;
+    roomIndicator.classList.remove('hidden');
+}
 
 // **Login Functionality**
 profilePicInput.addEventListener('change', async (e) => {
@@ -59,12 +90,12 @@ loginBtn.addEventListener('click', async () => {
     const about = (aboutInput && aboutInput.value ? aboutInput.value.trim() : '') || 'Hey there! I am using ClassChat';
 
     let profilePicPath = '/uploads/profiles/default-profile.jpg';
-    
+
     // Upload profile picture if selected
     if (profilePicInput.files[0]) {
         const formData = new FormData();
         formData.append('profilePic', profilePicInput.files[0]);
-        
+
         try {
             const response = await fetch('/upload-profile', {
                 method: 'POST',
@@ -78,20 +109,42 @@ loginBtn.addEventListener('click', async () => {
             console.error('Error uploading profile picture:', error);
         }
     }
-    
-    // Register user
+
+    // Register user with room ID
     socket.emit('user-register', {
         username: username,
         profilePic: profilePicPath,
-        about: about
+        about: about,
+        roomId: currentRoomId
     });
+});
+
+// Create room button handler
+createRoomBtn.addEventListener('click', async () => {
+    try {
+        const response = await fetch('/create-room');
+        const data = await response.json();
+        const roomId = data.roomId;
+
+        // Update URL and UI
+        setRoomIdInURL(roomId);
+        currentRoomId = roomId;
+        roomIndicator.textContent = `🔒 Private Room: ${roomId}`;
+        roomIndicator.classList.remove('hidden');
+
+        // Show success message
+        alert(`Private room created! Share this link with others:\n${generateRoomLink(roomId)}`);
+    } catch (error) {
+        console.error('Error creating room:', error);
+        alert('Failed to create room');
+    }
 });
 
 // **Utility Functions**
 function formatTime(timestamp) {
-    return new Date(timestamp).toLocaleTimeString([], { 
-        hour: '2-digit', 
-        minute: '2-digit' 
+    return new Date(timestamp).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit'
     });
 }
 
@@ -108,20 +161,28 @@ function formatDate(isoString) {
 
 function switchToGroupChat() {
     activeChat = 'group';
-    chatTitle.textContent = 'Class Chat Room';
-    chatStatus.textContent = `${onlineUsers.length} members`;
-    chatStatus.style.color = ''; 
+    const roomName = currentRoomId ? `Private Room (${currentRoomId})` : 'Class Chat Room';
+    chatTitle.textContent = roomName;
+    chatStatus.textContent = `${onlineUsers.length + 1} members`;
+    chatStatus.style.color = '';
     chatAvatar.src = 'profile.png';
     groupChatTab.classList.add('active');
-    
+
+    // Show copy room link button if in private room
+    if (currentRoomId) {
+        copyRoomLinkBtn.classList.remove('hidden');
+    } else {
+        copyRoomLinkBtn.classList.add('hidden');
+    }
+
     // Add this line to clear messages
     messagesWindow.innerHTML = '';
-    
+
     // Remove active state from user items
     document.querySelectorAll('.user-item').forEach(item => {
         item.classList.remove('active');
     });
-    
+
     // Close sidebar on mobile after switching to group chat
     if (window.innerWidth <= 768) {
         sidebar.classList.remove('active');
@@ -132,10 +193,10 @@ function switchToPrivateChat(user) {
     activeChat = user.id;
     chatTitle.textContent = user.username;
     chatStatus.textContent = 'Online';
-    chatStatus.style.color = ''; 
+    chatStatus.style.color = '';
     chatAvatar.src = user.profilePic;
     groupChatTab.classList.remove('active');
-    
+
     // Update active user item
     document.querySelectorAll('.user-item').forEach(item => {
         item.classList.remove('active');
@@ -143,7 +204,7 @@ function switchToPrivateChat(user) {
             item.classList.add('active');
         }
     });
-    
+
     // Clear messages and load private chat history (if any)
     messagesWindow.innerHTML = '';
 }
@@ -226,7 +287,7 @@ function createFileElement(fileData) {
         fileLink.href = fileData.path;
         fileLink.classList.add('file-link');
         fileLink.download = fileData.filename;
-        
+
         const fileIcon = fileData.mimetype.startsWith('image/') ? '🖼️' : '📄';
         fileLink.innerHTML = `${fileIcon} ${fileData.filename}`;
         messageBody.appendChild(fileLink);
@@ -245,18 +306,18 @@ function createFileElement(fileData) {
 function updateUsersList(users) {
     onlineUsers = users.filter(user => user.id !== currentUser.id);
     onlineCount.textContent = users.length;
-    
+
     usersList.innerHTML = '';
-    
+
     onlineUsers.forEach(user => {
         const userItem = document.createElement('div');
         userItem.classList.add('user-item');
         userItem.dataset.userId = user.id;
-        
+
         if (activeChat === user.id) {
             userItem.classList.add('active');
         }
-        
+
         userItem.innerHTML = `
             <img src="${user.profilePic}" alt="${user.username}" class="user-avatar">
             <div class="user-details">
@@ -265,7 +326,7 @@ function updateUsersList(users) {
             </div>
             <div class="user-status online"></div>
         `;
-        
+
         userItem.addEventListener('click', () => {
             switchToPrivateChat(user);
             // Close sidebar on mobile after selecting a user
@@ -273,7 +334,7 @@ function updateUsersList(users) {
                 sidebar.classList.remove('active');
             }
         });
-        
+
         usersList.appendChild(userItem);
     });
 }
@@ -281,18 +342,18 @@ function updateUsersList(users) {
 function handleTyping() {
     if (!isTyping) {
         isTyping = true;
-        socket.emit('typing', { 
-            recipientId: activeChat === 'group' ? null : activeChat, 
-            isTyping: true 
+        socket.emit('typing', {
+            recipientId: activeChat === 'group' ? null : activeChat,
+            isTyping: true
         });
     }
-    
+
     clearTimeout(typingTimer);
     typingTimer = setTimeout(() => {
         isTyping = false;
-        socket.emit('typing', { 
-            recipientId: activeChat === 'group' ? null : activeChat, 
-            isTyping: false 
+        socket.emit('typing', {
+            recipientId: activeChat === 'group' ? null : activeChat,
+            isTyping: false
         });
     }, 1000);
 }
@@ -313,9 +374,9 @@ messageForm.addEventListener('submit', (e) => {
     if (activeChat === 'group') {
         socket.emit('group-message', messageData);
     } else {
-        socket.emit('private-message', { 
-            recipientId: activeChat, 
-            message: messageData 
+        socket.emit('private-message', {
+            recipientId: activeChat,
+            message: messageData
         });
     }
 
@@ -332,7 +393,7 @@ fileInput.addEventListener('change', async () => {
     formData.append('file', file);
     formData.append('user', currentUser.username);
     formData.append('timestamp', Date.now());
-    
+
     if (activeChat !== 'group') {
         formData.append('recipientId', activeChat);
     }
@@ -343,7 +404,7 @@ fileInput.addEventListener('change', async () => {
             body: formData,
         });
         const result = await response.json();
-        
+
         if (response.ok) {
             socket.emit('file-upload', {
                 ...result.file,
@@ -354,7 +415,7 @@ fileInput.addEventListener('change', async () => {
         console.error('Error uploading file:', error);
         alert('Failed to upload file');
     }
-    
+
     fileInput.value = '';
 });
 // Voice recording functionality
@@ -376,21 +437,21 @@ voiceBtn.addEventListener('click', async () => {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             mediaRecorder = new MediaRecorder(stream);
             audioChunks = [];
-            
+
             mediaRecorder.ondataavailable = (event) => {
                 audioChunks.push(event.data);
             };
-            
+
             mediaRecorder.onstop = async () => {
                 const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                 // Stop all tracks
                 stream.getTracks().forEach(track => track.stop());
             };
-            
+
             mediaRecorder.start();
             voiceBtn.classList.add('recording');
             voiceRecordingPanel.classList.add('active');
-            
+
             // Start timer
             recordingStartTime = Date.now();
             recordingInterval = setInterval(() => {
@@ -399,7 +460,7 @@ voiceBtn.addEventListener('click', async () => {
                 const seconds = elapsed % 60;
                 recordingTime.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
             }, 1000);
-            
+
         } catch (error) {
             console.error('Error accessing microphone:', error);
             alert('Could not access microphone. Please grant permission.');
@@ -425,28 +486,28 @@ sendRecordingBtn.addEventListener('click', async () => {
         voiceBtn.classList.remove('recording');
         voiceRecordingPanel.classList.remove('active');
         recordingTime.textContent = '0:00';
-        
+
         // Wait for the recording to finish processing
         mediaRecorder.onstop = async () => {
             const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-            
+
             // Create FormData and upload
             const formData = new FormData();
             formData.append('file', audioBlob, `voice-${Date.now()}.webm`);
             formData.append('user', currentUser.username);
             formData.append('timestamp', Date.now());
-            
+
             if (activeChat !== 'group') {
                 formData.append('recipientId', activeChat);
             }
-            
+
             try {
                 const response = await fetch('/upload', {
                     method: 'POST',
                     body: formData,
                 });
                 const result = await response.json();
-                
+
                 if (response.ok) {
                     socket.emit('file-upload', {
                         ...result.file,
@@ -458,7 +519,7 @@ sendRecordingBtn.addEventListener('click', async () => {
                 console.error('Error uploading voice message:', error);
                 alert('Failed to send voice message');
             }
-            
+
             // Stop all tracks
             mediaRecorder.stream.getTracks().forEach(track => track.stop());
         };
@@ -542,23 +603,36 @@ if (typeof chatHeaderClickable !== 'undefined' && chatHeaderClickable) {
 // **Socket Event Handlers**
 socket.on('user-registered', (user) => {
     currentUser = user;
+    currentRoomId = user.roomId;
     currentUsername.textContent = user.username;
     currentUserId.textContent = `ID: ${user.id}`;
     currentUserPic.src = user.profilePic;
     if (currentUserInfo) {
         currentUserInfo.textContent = user.about || '';
     }
-    
+
+    // Update chat title based on room
+    if (currentRoomId && currentRoomId !== 'public') {
+        chatTitle.textContent = `Private Room (${currentRoomId})`;
+        copyRoomLinkBtn.classList.remove('hidden');
+    } else {
+        chatTitle.textContent = 'Class Chat Room';
+        copyRoomLinkBtn.classList.add('hidden');
+    }
+
     loginScreen.classList.add('hidden');
     chatScreen.classList.remove('hidden');
-    
-    console.log('User registered:', user);
+
+    console.log('User registered:', user, 'Room:', currentRoomId);
 });
 
 socket.on('users-online', (users) => {
     updateUsersList(users);
-    chatStatus.textContent = activeChat === 'group' ? 
-        `${users.length} members` : 'Online';
+    if (activeChat === 'group') {
+        chatStatus.textContent = `${users.length} members`;
+    } else {
+        chatStatus.textContent = 'Online';
+    }
 });
 
 socket.on('chat', (messageData) => {
@@ -567,8 +641,8 @@ socket.on('chat', (messageData) => {
         const messageElement = createMessageElement(messageData);
         messagesWindow.appendChild(messageElement);
         messagesWindow.scrollTop = messagesWindow.scrollHeight;
-    } else if (messageData.type === 'private' && 
-               (activeChat === messageData.senderId || activeChat === messageData.recipientId)) {
+    } else if (messageData.type === 'private' &&
+        (activeChat === messageData.senderId || activeChat === messageData.recipientId)) {
         const messageElement = createMessageElement(messageData);
         messagesWindow.appendChild(messageElement);
         messagesWindow.scrollTop = messagesWindow.scrollHeight;
@@ -581,8 +655,8 @@ socket.on('file-received', (fileData) => {
         const fileElement = createFileElement(fileData);
         messagesWindow.appendChild(fileElement);
         messagesWindow.scrollTop = messagesWindow.scrollHeight;
-    } else if (fileData.type === 'private' && 
-               (activeChat === fileData.senderId || activeChat === fileData.recipientId)) {
+    } else if (fileData.type === 'private' &&
+        (activeChat === fileData.senderId || activeChat === fileData.recipientId)) {
         const fileElement = createFileElement(fileData);
         messagesWindow.appendChild(fileElement);
         messagesWindow.scrollTop = messagesWindow.scrollHeight;
@@ -593,10 +667,10 @@ socket.on('user-typing', (data) => {
     if (data.userId !== currentUser.id) {
         // Check if typing is relevant to current chat
         const isRelevantToCurrentChat = (
-            (activeChat === 'group' && !data.recipientId) || 
+            (activeChat === 'group' && !data.recipientId) ||
             (activeChat === data.userId)
         );
-        
+
         if (isRelevantToCurrentChat) {
             if (data.isTyping) {
                 // Show typing in chat header
@@ -638,5 +712,24 @@ menuToggle.addEventListener('click', () => {
 
 updateMenuButtonVisibility();
 window.addEventListener('resize', updateMenuButtonVisibility);
+
+// Copy room link button handler
+copyRoomLinkBtn.addEventListener('click', () => {
+    if (currentRoomId) {
+        const roomLink = generateRoomLink(currentRoomId);
+        navigator.clipboard.writeText(roomLink).then(() => {
+            // Show temporary success message
+            const originalText = copyRoomLinkBtn.textContent;
+            copyRoomLinkBtn.textContent = '✓';
+            setTimeout(() => {
+                copyRoomLinkBtn.textContent = originalText;
+            }, 2000);
+        }).catch(err => {
+            console.error('Failed to copy link:', err);
+            alert(`Copy this link:\n${roomLink}`);
+        });
+    }
+});
+
 // Initialize
-console.log('Sonnet chat app initialized');
+console.log('Sonnet chat app initialized', currentRoomId ? `in room: ${currentRoomId}` : 'in public room');

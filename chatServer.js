@@ -40,12 +40,32 @@ app.use(express.static(__dirname));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.json());
 
-// Store connected users with their details
+// Store rooms with their users and data
+// Structure: { roomId: { users: {}, createdAt: timestamp } }
+const rooms = {};
+
+// Store connected users with their details (global reference)
 const users = {};
 
 // Generate unique user ID
 function generateUserId() {
     return crypto.randomBytes(8).toString('hex');
+}
+
+// Generate unique room ID
+function generateRoomId() {
+    return crypto.randomBytes(6).toString('hex');
+}
+
+// Get or create room
+function getOrCreateRoom(roomId) {
+    if (!rooms[roomId]) {
+        rooms[roomId] = {
+            users: {},
+            createdAt: new Date().toISOString()
+        };
+    }
+    return rooms[roomId];
 }
 
 io.on('connection', (socket) => {
@@ -54,6 +74,8 @@ io.on('connection', (socket) => {
     // Handle user registration/login
     socket.on('user-register', (userData) => {
         const userId = generateUserId();
+        const roomId = userData.roomId || 'public'; // Default to public room
+
         const user = {
             id: userId,
             username: userData.username,
@@ -61,27 +83,36 @@ io.on('connection', (socket) => {
             profilePic: userData.profilePic || '/uploads/profiles/default-profile.jpg',
             about: userData.about || 'Hey there! I am using ClassChat',
             status: 'online',
-            joinedAt: new Date().toISOString()
+            joinedAt: new Date().toISOString(),
+            roomId: roomId
         };
-        
+
         users[userId] = user;
-        socket.userId = userId; // Store userId in socket for easy access
-        
-        console.log(`User ${userData.username} registered with ID: ${userId}`);
-        
-        // Send user their own data
-        socket.emit('user-registered', user);
-        
-        // Broadcast updated user list to all clients
-        io.emit('users-online', Object.values(users));
+        socket.userId = userId;
+        socket.roomId = roomId;
+
+        // Join the room
+        socket.join(roomId);
+
+        // Add user to room
+        const room = getOrCreateRoom(roomId);
+        room.users[userId] = user;
+
+        console.log(`User ${userData.username} registered with ID: ${userId} in room: ${roomId}`);
+
+        // Send user their own data with room info
+        socket.emit('user-registered', { ...user, roomId: roomId });
+
+        // Broadcast updated user list to all clients in the same room
+        io.to(roomId).emit('users-online', Object.values(room.users));
     });
 
     // Handle private messages
     socket.on('private-message', ({ recipientId, message }) => {
         const sender = users[socket.userId];
         const recipient = users[recipientId];
-        
-        if (recipient && sender) {
+
+        if (recipient && sender && recipient.roomId === sender.roomId) {
             const messageData = {
                 ...message,
                 messageId: crypto.randomUUID(),
@@ -91,19 +122,19 @@ io.on('connection', (socket) => {
                 senderName: sender.username,
                 senderProfile: sender.profilePic
             };
-            
+
             // Send to recipient
             io.to(recipient.socketId).emit('chat', messageData);
             // Send back to sender (for confirmation)
             socket.emit('chat', messageData);
-            
+
             console.log(`Private message from ${sender.username} to ${recipient.username}`);
         } else {
             socket.emit('error', { message: 'Recipient not found or offline' });
         }
     });
 
-    // Handle group messages
+    // Handle group messages (room-specific)
     socket.on('group-message', (message) => {
         const sender = users[socket.userId];
         if (sender) {
@@ -115,9 +146,10 @@ io.on('connection', (socket) => {
                 senderName: sender.username,
                 senderProfile: sender.profilePic
             };
-            
-            io.emit('chat', messageData);
-            console.log(`Group message from ${sender.username}: ${message.text}`);
+
+            // Broadcast to all users in the same room
+            io.to(socket.roomId).emit('chat', messageData);
+            console.log(`Group message from ${sender.username} in room ${socket.roomId}: ${message.text}`);
         }
     });
 
@@ -132,19 +164,19 @@ io.on('connection', (socket) => {
                 senderName: sender.username,
                 senderProfile: sender.profilePic
             };
-            
+
             if (file.recipientId) {
                 // Private file
                 const recipient = users[file.recipientId];
-                if (recipient) {
+                if (recipient && recipient.roomId === sender.roomId) {
                     fileData.type = 'private';
                     io.to(recipient.socketId).emit('file-received', fileData);
                     socket.emit('file-received', fileData);
                 }
             } else {
-                // Group file
+                // Group file (room-specific)
                 fileData.type = 'group';
-                io.emit('file-received', fileData);
+                io.to(socket.roomId).emit('file-received', fileData);
             }
         }
     });
@@ -156,7 +188,7 @@ io.on('connection', (socket) => {
             if (recipientId) {
                 // Private chat typing
                 const recipient = users[recipientId];
-                if (recipient) {
+                if (recipient && recipient.roomId === sender.roomId) {
                     io.to(recipient.socketId).emit('user-typing', {
                         userId: sender.id,
                         username: sender.username,
@@ -164,8 +196,8 @@ io.on('connection', (socket) => {
                     });
                 }
             } else {
-                // Group chat typing
-                socket.broadcast.emit('user-typing', {
+                // Group chat typing (room-specific)
+                socket.to(socket.roomId).emit('user-typing', {
                     userId: sender.id,
                     username: sender.username,
                     isTyping: isTyping
@@ -178,14 +210,34 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         if (socket.userId && users[socket.userId]) {
             const user = users[socket.userId];
-            console.log(`User ${user.username} disconnected.`);
+            const roomId = user.roomId;
+
+            console.log(`User ${user.username} disconnected from room ${roomId}.`);
+
+            // Remove user from room
+            if (rooms[roomId]) {
+                delete rooms[roomId].users[socket.userId];
+
+                // Broadcast updated user list to room
+                io.to(roomId).emit('users-online', Object.values(rooms[roomId].users));
+
+                // Clean up empty rooms (except public)
+                if (Object.keys(rooms[roomId].users).length === 0 && roomId !== 'public') {
+                    delete rooms[roomId];
+                    console.log(`Room ${roomId} deleted (empty)`);
+                }
+            }
+
             delete users[socket.userId];
-            
-            // Broadcast updated user list
-            io.emit('users-online', Object.values(users));
         }
         console.log(`Socket disconnected with ID: ${socket.id}`);
     });
+});
+
+// Route to create a new room
+app.get('/create-room', (req, res) => {
+    const roomId = generateRoomId();
+    res.json({ roomId: roomId });
 });
 
 // Route to handle file uploads
@@ -193,20 +245,20 @@ app.post('/upload', upload.single('file'), (req, res) => {
     if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded.' });
     }
-    
+
     const file = {
         filename: req.file.originalname,
         path: `/uploads/files/${req.file.filename}`,
         mimetype: req.file.mimetype,
         size: req.file.size,
         user: req.body.user,
-        timestamp: parseInt(req.body.timestamp) || Date.now(),  // <-- Parse to number
+        timestamp: parseInt(req.body.timestamp) || Date.now(),
         recipientId: req.body.recipientId || null
     };
-    
-    res.status(200).json({ 
+
+    res.status(200).json({
         message: 'File uploaded successfully.',
-        file: file 
+        file: file
     });
 });
 
@@ -215,17 +267,17 @@ app.post('/upload-profile', upload.single('profilePic'), (req, res) => {
     if (!req.file) {
         return res.status(400).json({ error: 'No profile picture uploaded.' });
     }
-    
+
     const profilePic = {
         filename: req.file.originalname,
         path: `/uploads/profiles/${req.file.filename}`,
         mimetype: req.file.mimetype,
         size: req.file.size
     };
-    
-    res.status(200).json({ 
+
+    res.status(200).json({
         message: 'Profile picture uploaded successfully.',
-        profilePic: profilePic 
+        profilePic: profilePic
     });
 });
 
