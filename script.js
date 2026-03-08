@@ -464,12 +464,48 @@ voiceBtn.addEventListener('click', async () => {
             audioChunks = [];
 
             mediaRecorder.ondataavailable = (event) => {
-                audioChunks.push(event.data);
+                if (event.data.size > 0) {
+                    audioChunks.push(event.data);
+                }
             };
 
             mediaRecorder.onstop = async () => {
-                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                // Stop all tracks
+                const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+
+                // If it was cancelled, audioChunks might be emptied by the cancel button before reaching here
+                if (audioChunks.length === 0) return;
+
+                // Create FormData and upload
+                const formData = new FormData();
+                const extension = (mediaRecorder.mimeType || '').includes('mp4') ? 'mp4' : 'webm';
+                formData.append('file', audioBlob, `voice-${Date.now()}.${extension}`);
+                formData.append('user', currentUser.username);
+                formData.append('timestamp', Date.now());
+
+                if (activeChat !== 'group') {
+                    formData.append('recipientId', activeChat);
+                }
+
+                try {
+                    const response = await fetch('/upload', {
+                        method: 'POST',
+                        body: formData,
+                    });
+                    const result = await response.json();
+
+                    if (response.ok) {
+                        socket.emit('file-upload', {
+                            ...result.file,
+                            recipientId: activeChat !== 'group' ? activeChat : null,
+                            isVoiceMessage: true
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error uploading voice message:', error);
+                    alert('Failed to send voice message');
+                }
+
+                // Stop all tracks to release microphone
                 stream.getTracks().forEach(track => track.stop());
             };
 
@@ -495,59 +531,23 @@ voiceBtn.addEventListener('click', async () => {
 
 cancelRecordingBtn.addEventListener('click', () => {
     if (mediaRecorder && mediaRecorder.state === 'recording') {
+        audioChunks = []; // Clear chunks so onstop ignores it
         mediaRecorder.stop();
         clearInterval(recordingInterval);
         voiceBtn.classList.remove('recording');
         voiceRecordingPanel.classList.remove('active');
-        audioChunks = [];
         recordingTime.textContent = '0:00';
     }
 });
 
 sendRecordingBtn.addEventListener('click', async () => {
     if (mediaRecorder && mediaRecorder.state === 'recording') {
+        // Just calling stop() will trigger the onstop event handler we defined above
         mediaRecorder.stop();
         clearInterval(recordingInterval);
         voiceBtn.classList.remove('recording');
         voiceRecordingPanel.classList.remove('active');
         recordingTime.textContent = '0:00';
-
-        // Wait for the recording to finish processing
-        mediaRecorder.onstop = async () => {
-            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-
-            // Create FormData and upload
-            const formData = new FormData();
-            formData.append('file', audioBlob, `voice-${Date.now()}.webm`);
-            formData.append('user', currentUser.username);
-            formData.append('timestamp', Date.now());
-
-            if (activeChat !== 'group') {
-                formData.append('recipientId', activeChat);
-            }
-
-            try {
-                const response = await fetch('/upload', {
-                    method: 'POST',
-                    body: formData,
-                });
-                const result = await response.json();
-
-                if (response.ok) {
-                    socket.emit('file-upload', {
-                        ...result.file,
-                        recipientId: activeChat !== 'group' ? activeChat : null,
-                        isVoiceMessage: true
-                    });
-                }
-            } catch (error) {
-                console.error('Error uploading voice message:', error);
-                alert('Failed to send voice message');
-            }
-
-            // Stop all tracks
-            mediaRecorder.stream.getTracks().forEach(track => track.stop());
-        };
     }
 });
 // Close modal functionality
