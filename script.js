@@ -526,6 +526,14 @@ voiceBtn.addEventListener('click', async () => {
             console.error('Error accessing microphone:', error);
             alert('Could not access microphone. Please grant permission.');
         }
+    } else if (mediaRecorder && mediaRecorder.state === 'recording') {
+        // Cancel recording if mic button is pressed again
+        audioChunks = [];
+        mediaRecorder.stop();
+        clearInterval(recordingInterval);
+        voiceBtn.classList.remove('recording');
+        voiceRecordingPanel.classList.remove('active');
+        recordingTime.textContent = '0:00';
     }
 });
 
