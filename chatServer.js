@@ -928,6 +928,25 @@ app.delete('/chats/pins/:userId/:chatId', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3004;
-server.listen(PORT, '0.0.0.0', () => {
-    console.log(`Sonnet chat server is running on port ${PORT}`);
-});
+
+// Wait for database initialization to complete BEFORE listening on the port.
+// This prevents "relation 'users' does not exist" errors on fresh Render deployments.
+(async () => {
+    try {
+        console.log('Initializing database schema (schema.sql)...');
+        const fs = require('fs');
+        const schemaPath = path.join(__dirname, 'schema.sql');
+        const schemaSql = fs.readFileSync(schemaPath, 'utf8');
+        await query(schemaSql);
+        console.log('✅ Base schema created.');
+
+        await query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_edited BOOLEAN DEFAULT false;');
+        console.log('✅ Additional columns added.');
+    } catch (err) {
+        console.error('❌ Error initializing database schema:', err);
+    }
+
+    server.listen(PORT, '0.0.0.0', () => {
+        console.log(`Sonnet chat server is running on port ${PORT}`);
+    });
+})();
