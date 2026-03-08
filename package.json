@@ -20,6 +20,7 @@
   "type": "commonjs",
   "main": "chatServer.js",
   "scripts": {
+    "prestart": "node init-db.js",
     "start": "node chatServer.js",
     "dev": "nodemon chatServer.js",
     "test": "echo \"Error: no test specified\" && exit 1"
