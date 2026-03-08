@@ -159,6 +159,31 @@ function formatDate(isoString) {
     });
 }
 
+async function loadMessages(type, targetId) {
+    messagesWindow.innerHTML = '';
+    try {
+        let url = '';
+        if (type === 'group') {
+            url = `/messages/${targetId || 'public'}`;
+        } else {
+            url = `/messages/private/${targetId}?senderId=${currentUser.id}`;
+        }
+        const response = await fetch(url);
+        const data = await response.json();
+        if (data.messages) {
+            data.messages.forEach(msg => {
+                // Determine if it's a file/sticker or regular text
+                const isFile = msg.kind === 'file' || msg.kind === 'sticker';
+                const el = isFile ? createFileElement(msg) : createMessageElement(msg);
+                messagesWindow.appendChild(el);
+            });
+            messagesWindow.scrollTop = messagesWindow.scrollHeight;
+        }
+    } catch (err) {
+        console.error('Error loading messages:', err);
+    }
+}
+
 function switchToGroupChat() {
     activeChat = 'group';
     const roomName = currentRoomId ? `Private Room (${currentRoomId})` : 'Class Chat Room';
@@ -175,8 +200,8 @@ function switchToGroupChat() {
         copyRoomLinkBtn.classList.add('hidden');
     }
 
-    // Add this line to clear messages
-    messagesWindow.innerHTML = '';
+    // Clear messages and load group chat history
+    loadMessages('group', currentRoomId || 'public');
 
     // Remove active state from user items
     document.querySelectorAll('.user-item').forEach(item => {
@@ -205,8 +230,8 @@ function switchToPrivateChat(user) {
         }
     });
 
-    // Clear messages and load private chat history (if any)
-    messagesWindow.innerHTML = '';
+    // Clear messages and load private chat history
+    loadMessages('private', user.id);
 }
 
 function createMessageElement(messageData) {
@@ -624,6 +649,9 @@ socket.on('user-registered', (user) => {
     chatScreen.classList.remove('hidden');
 
     console.log('User registered:', user, 'Room:', currentRoomId);
+
+    // Load initial group messages
+    loadMessages('group', currentRoomId || 'public');
 });
 
 socket.on('users-online', (users) => {
