@@ -304,8 +304,7 @@ function createFileElement(fileData) {
         const audioPlayer = document.createElement('audio');
         audioPlayer.controls = true;
         audioPlayer.src = fileData.path;
-        audioPlayer.style.width = '100%';
-        audioPlayer.style.maxWidth = '250px';
+        audioPlayer.style.width = '250px'; // Fixed width prevents flex collapse
         messageBody.appendChild(audioPlayer);
     } else {
         const fileLink = document.createElement('a');
