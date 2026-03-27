@@ -113,7 +113,7 @@ io.on('connection', (socket) => {
 
             // Check if user with this username already exists in DB
             const existingUser = await query(
-                'SELECT id, profile_pic, about FROM users WHERE username = $1 LIMIT 1',
+                'SELECT id, profile_pic, about, is_admin FROM users WHERE username = $1 LIMIT 1',
                 [userData.username]
             );
 
@@ -154,6 +154,8 @@ io.on('connection', (socket) => {
                 about = userData.about || 'Hey there! I am using ClassChat';
             }
 
+            const isAdmin = isReturning ? (existingUser.rows[0].is_admin || false) : false;
+
             const user = {
                 id: userId,
                 username: userData.username,
@@ -163,7 +165,8 @@ io.on('connection', (socket) => {
                 status: 'online',
                 joinedAt: new Date().toISOString(),
                 roomId: roomId,
-                pushToken: userData.pushToken || null
+                pushToken: userData.pushToken || null,
+                isAdmin: isAdmin
             };
 
             // Persist user to DB (upsert by id)
@@ -281,6 +284,12 @@ io.on('connection', (socket) => {
     socket.on('group-message', async (message) => {
         const sender = users[socket.userId];
         if (sender) {
+            // Enforce admin-only posting in the public room
+            if (socket.roomId === 'public' && !sender.isAdmin) {
+                socket.emit('error', { message: 'Only admins can post in the announcements channel' });
+                return;
+            }
+
             const messageData = {
                 ...message,
                 messageId: crypto.randomUUID(),
@@ -312,6 +321,12 @@ io.on('connection', (socket) => {
     socket.on('file-upload', async (file) => {
         const sender = users[socket.userId];
         if (sender) {
+            // Enforce admin-only file uploads in the public room
+            if (socket.roomId === 'public' && !sender.isAdmin && !file.recipientId) {
+                socket.emit('error', { message: 'Only admins can post in the announcements channel' });
+                return;
+            }
+
             const fileData = {
                 ...file,
                 messageId: crypto.randomUUID(),
@@ -514,7 +529,8 @@ io.on('connection', (socket) => {
                     });
                 }
             } else {
-                // Group chat typing (room-specific)
+                // Group chat typing (room-specific) — skip for non-admins in public room
+                if (socket.roomId === 'public' && !sender.isAdmin) return;
                 socket.to(socket.roomId).emit('user-typing', {
                     userId: sender.id,
                     username: sender.username,
@@ -941,6 +957,7 @@ const PORT = process.env.PORT || 3004;
         console.log('✅ Base schema created.');
 
         await query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_edited BOOLEAN DEFAULT false;');
+        await query('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false;');
         console.log('✅ Additional columns added.');
     } catch (err) {
         console.error('❌ Error initializing database schema:', err);

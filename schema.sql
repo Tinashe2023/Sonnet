@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
     profile_pic TEXT DEFAULT '/uploads/profiles/default-profile.jpg',
     about VARCHAR(140) DEFAULT 'Hey there! I am using ClassChat',
     push_token TEXT,
+    is_admin BOOLEAN DEFAULT false,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
